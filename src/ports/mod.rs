@@ -1,8 +1,12 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::Result;
+use tokio::sync::Mutex;
 
-use crate::{application::Application, typespec::Symbol};
+use crate::{
+    application::Application,
+    typespec::{ApplicationLayer, Symbol},
+};
 
 /*
 Ports are used as an internal API in the application layer to decouple implmentations from the
@@ -18,7 +22,7 @@ enum MarketStreamResponse {
     IsConnected(Arc<Mutex<dyn MarketStream>>),
 }
 
-pub trait MarketStream {
+pub trait MarketStream: Send + Sync {
     // uses explicit methods instead of pattern matching enums as a monad is not needed for this driven port
     // as multiple calls will be made to the service and a pointer is needed to reach the implement struct
 
@@ -29,10 +33,10 @@ pub trait MarketStream {
     //fn connect_to_stream(&self) -> Arc<Self>;
 
     /// explicitly gets the ask
-    fn get_order_book_asks(symbol: Symbol) -> Vec<f32>;
+    fn get_order_book_asks(&self, symbol: Symbol) -> Vec<f32>;
 
     /// explicitly get the bids
-    fn get_order_book_bids(symbol: Symbol) -> Vec<f32>;
+    fn get_order_book_bids(&self, symbol: Symbol) -> Vec<f32>;
 }
 
 // Web server port that contains a function:
@@ -41,11 +45,10 @@ pub trait MarketStream {
 // to run the actual server
 
 pub struct WebServerSettings {
-    host: String,
+    pub port: String,
 }
 
 pub trait WebServer {
-    fn new(settings: WebServerSettings) -> Self;
-    fn with_app(application: Arc<Mutex<Application>>) -> Self;
-    fn run_server(self) -> Result<()>;
+    fn new(settings: WebServerSettings, app_layer: ApplicationLayer) -> Self;
+    async fn run_server(&self) -> Result<()>;
 }
