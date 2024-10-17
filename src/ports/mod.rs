@@ -3,10 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use tokio::sync::Mutex;
 
-use crate::{
-    application::Application,
-    typespec::{ApplicationLayer, Symbol},
-};
+use crate::typespec::{ApplicationLayer, Symbol};
 
 /*
 Ports are used as an internal API in the application layer to decouple implmentations from the
