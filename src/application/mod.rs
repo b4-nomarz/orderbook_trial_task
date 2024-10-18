@@ -15,7 +15,7 @@ way instead of writing explicit functions that is called with different type par
 that can then be pattern matched into a workflow of functions
 */
 
-enum ApplicationQuery {
+pub enum ApplicationQuery {
     GetAverageValueOfSymbol(Symbol),
 }
 
@@ -24,12 +24,12 @@ Command Sum type for handling commands to the system following
 command query response segregation principles
 */
 
-enum ApplicationCommand {
+pub enum ApplicationCommand {
     ConnectToInfrastructure,
 }
 
 // enum ApplicationResponses acts as a DTO and a sum return type
-enum ApplicationResponse {
+pub enum ApplicationResponse {
     CurrentAveragePriceForSymbol {
         symbol: Symbol,
         // String as placeholder for a more terse type dealing with ticker prices
