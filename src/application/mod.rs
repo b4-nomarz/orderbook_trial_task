@@ -49,7 +49,7 @@ impl Application {
 
                 //two Arc clones are needed to work around lifetime error
                 let ms = self.market_stream.clone();
-                // works around using sender like how it is shown in tokio docs
+                // subscribe to market stream broadcast through receiver resubscriptians due to sender moving in another thread
                 let mut broadcast_receiver = ms.resubscribe();
                 let app_res: ApplicationResponse = loop {
                     let message: Option<Arc<String>> = broadcast_receiver.recv().await.ok();
