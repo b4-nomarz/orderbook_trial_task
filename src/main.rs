@@ -1,20 +1,12 @@
-use std::sync::Arc;
-
-use binance_spot_connector_rust::market_stream::diff_depth::DiffDepthStream;
-use tokio::{
-    spawn,
-    sync::{
-        broadcast::{Receiver, Sender},
-        Mutex,
-    },
-};
-
 use orderbook_trial_task::{
     adapters::{BinanceDiffDepthStream, ClientWebServer},
     application::Application,
     ports::{MarketStream, WebServer, WebServerSettings},
     typespec::Symbol,
 };
+
+use std::sync::Arc;
+use tokio::sync::{broadcast, Mutex};
 
 #[tokio::main]
 async fn main() {
@@ -38,19 +30,20 @@ async fn main() {
     // Market connections only pushes out raw values to be handled by other services
     // TODO need to find a way to change subscriptions.
     // this is a temp measure due to binance_spot_market_connector lib constraints
-    let reciever = BinanceDiffDepthStream
+    let receiver = BinanceDiffDepthStream
         .subscribe(vec![Symbol("BTCUSDC".into())])
         .await
         .expect("receiver to be made");
 
-    let app_layer = Arc::new(Mutex::new(Application {
-        market_stream: Arc::new(Mutex::new(reciever)),
-    }));
+    let app_layer = Application {
+        market_stream: receiver,
+    };
 
     let web_server_settings = WebServerSettings {
         port: "3000".into(),
     };
 
+    println!("starting server on localhost:{}", web_server_settings.port);
     let _ = ClientWebServer::new(web_server_settings, app_layer.clone())
         .run_server()
         .await;

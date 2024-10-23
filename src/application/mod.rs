@@ -1,19 +1,18 @@
+use crate::{core, ports::MarketStreamMessageBroadcastReceiver, typespec::Symbol};
+use anyhow::Result;
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::sync::{
-    mpsc::{Receiver, Sender},
-    Mutex, RwLock,
-};
 
-use anyhow::Result;
-
-use crate::{core, typespec::Symbol};
-
-// Application layer is a stateful product type that can be called by client adapters.
+/*
+Application struct holds pointers to be used by different adapters
+It implements business logic and is the access point to the domain core functions.
+It is the API of all driving adapters that a client can access.
+*/
+// Application is to be passed into a WebServer implementaion
+// Uses clones so that driving adapters can have state from channels in sync
+#[derive(Clone)]
 pub struct Application {
-    pub market_stream: Arc<Mutex<Receiver<String>>>,
-    // market cache for app layer to store latest market stream information
-    //market_stream_cache: Arc<RwLock<BinanceDiffDepthCache<'_>>>,
+    pub market_stream: MarketStreamMessageBroadcastReceiver,
 }
 
 /*
@@ -21,7 +20,6 @@ ApplicationQuery enum type act as the API which driving adapters use to make que
 way instead of writing explicit functions that is called with different type parameters we use a single type
 that can then be pattern matched into a workflow of functions
 */
-
 pub enum ApplicationQuery {
     GetAverageValueOfSymbol(Symbol),
 }
@@ -51,11 +49,10 @@ impl Application {
 
                 //two Arc clones are needed to work around lifetime error
                 let ms = self.market_stream.clone();
-                let clone = ms.clone();
-                let mutex = clone.lock();
-                let mut recv = mutex.await;
+                // works around using sender like how it is shown in tokio docs
+                let mut broadcast_receiver = ms.resubscribe();
                 let app_res: ApplicationResponse = loop {
-                    let message: Option<String> = recv.recv().await;
+                    let message: Option<Arc<String>> = broadcast_receiver.recv().await.ok();
                     match message {
                         Some(string) => {
                             let json_value: Value =
@@ -69,7 +66,7 @@ impl Application {
                             And then have those values be used in the application layer.
                             */
 
-                            // guards against initial connection message
+                            // guard to handle initial connection message
                             if json_value["result"] == Value::Null {
                                 ApplicationResponse::InfrastructureConnected;
                             };

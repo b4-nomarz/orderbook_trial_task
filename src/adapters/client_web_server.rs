@@ -89,9 +89,6 @@ async fn average_price_web_socket(
                     let pair = serde_json::from_str::<PairQuery>(msg.clone().as_str());
 
                     if let Ok(dto) = pair {
-                        let app_layer_clone = app_layer.clone();
-                        let app_layer_mutex = app_layer_clone.lock().await;
-
                         let app_layer_res = {
                             let query = {
                                 let symbol = {
@@ -102,7 +99,7 @@ async fn average_price_web_socket(
                                 ApplicationQuery::GetAverageValueOfSymbol(symbol)
                             };
 
-                            app_layer_mutex.handle_query(query).await
+                            app_layer.handle_query(query).await
                         };
 
                         match app_layer_res {

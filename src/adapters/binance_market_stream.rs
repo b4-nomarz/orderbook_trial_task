@@ -1,12 +1,15 @@
-use std::fmt::Display;
+use std::sync::Arc;
 
-use crate::{ports::MarketStream, typespec::Symbol};
+use crate::{
+    ports::{MarketStream, MarketStreamMessageBroadcastReceiver},
+    typespec::Symbol,
+};
 use anyhow::{anyhow, Result};
 use binance_spot_connector_rust::{
     market_stream::diff_depth::DiffDepthStream, tokio_tungstenite::BinanceWebSocketClient,
 };
 use futures_util::StreamExt;
-use tokio::sync::mpsc::{self, Receiver};
+use tokio::sync::broadcast;
 
 // A infrastructure struct that implements a driven port to be used in
 // the application layer
@@ -19,7 +22,10 @@ impl BinanceDiffDepthStream {
 }
 
 impl MarketStream for BinanceDiffDepthStream {
-    async fn subscribe(&self, symbols: Vec<Symbol>) -> Result<Receiver<String>> {
+    async fn subscribe(
+        &self,
+        symbols: Vec<Symbol>,
+    ) -> Result<MarketStreamMessageBroadcastReceiver> {
         // guard against too many Symbols according to binance api 1024 streams,
         if symbols.len() == 1024 {
             return Err(anyhow!("Too many streams. Binance max limit 1024"));
@@ -40,15 +46,19 @@ impl MarketStream for BinanceDiffDepthStream {
             .into()])
             .await;
 
-        let (sender, receiver) = mpsc::channel::<String>(100);
+        let (sender, receiver) = broadcast::channel::<Arc<String>>(16);
 
         tokio::spawn(async move {
             loop {
                 match ws_conn.as_mut().next().await {
                     Some(Ok(message)) => {
+                        // TODO match msg based on type to either keep connection alive
+                        // or send message into the sender stream
                         let msg = message.into_text().expect("message to convert to String");
                         // TODO match if ping frame send pong
-                        let _ = sender.send(msg).await;
+
+                        //let market_stream_broadcast = arc_sender.clone();
+                        let _ = sender.send(Arc::new(msg));
                     }
                     Some(Err(_)) => break,
                     None => break,
@@ -56,7 +66,11 @@ impl MarketStream for BinanceDiffDepthStream {
             }
         });
 
-        Ok(receiver)
+        let recv = Arc::new(receiver);
+
+        Ok(recv)
+
+        // update sender with new value
     }
 }
 
@@ -68,12 +82,17 @@ mod tests {
     async fn test_reciever_returned_by_stream_subscription() {
         let setup = BinanceDiffDepthStream::new();
 
-        let mut testfn = setup
+        let testfn = setup
             .subscribe(vec![Symbol("BTCUSDC".into())])
             .await
             .unwrap();
 
-        let subscription_msg = testfn.recv().await.expect("message to be in receiver");
+        let subscription_msg = testfn
+            .clone()
+            .resubscribe()
+            .recv()
+            .await
+            .expect("message to be in receiver");
 
         let test_val =
             serde_json::to_value(subscription_msg.to_string()).expect("msg to be a json response");
