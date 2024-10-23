@@ -36,6 +36,8 @@ async fn main() {
     */
 
     // Market connections only pushes out raw values to be handled by other services
+    // TODO need to find a way to change subscriptions.
+    // this is a temp measure due to binance_spot_market_connector lib constraints
     let reciever = BinanceDiffDepthStream
         .subscribe(vec![Symbol("BTCUSDC".into())])
         .await

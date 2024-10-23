@@ -130,33 +130,3 @@ impl Application {
         }
     }
 }
-
-/*
-let app_resp = loop {
-    match stream.recv().await {
-        Some(BinanceResponse::DiffDepth(data)) => {
-            // takes those values and applies the core function of finding average price
-            //TODO let price = crate::core::average_price_of_order_book(asks, bids);
-            println!("{:?}", data);
-            break Ok(ApplicationResponse::CurrentAveragePriceForSymbol {
-                symbol: symbol_struct.clone(),
-                // TODO
-                price: "100".to_string(),
-            });
-        }
-        Some(BinanceResponse::DeserializingFailed) => {
-            println!("Deserializing failed");
-            break Ok(ApplicationResponse::InternalError);
-        }
-        Some(BinanceResponse::Subscribed) => {
-            println!("Subscribed");
-            break Ok(ApplicationResponse::InfrastructureConnected);
-        }
-        _ => {
-            println!("no matching responses");
-            break Ok(ApplicationResponse::InternalError);
-        }
-    }
-};
-
-app_resp*/

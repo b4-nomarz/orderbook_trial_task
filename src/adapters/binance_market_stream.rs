@@ -29,8 +29,11 @@ impl MarketStream for BinanceDiffDepthStream {
             .await
             .expect("Failed to connect");
 
-        // Need to find way to coerce types
+        // Need to find way to coerce types so subscriptions can be dynamic
+        // may need to create service specific implementation
         ws_conn
+            // calls 1000ms since 100ms creates pure noise due
+            // to the small amount of asks and bids in each frame
             .subscribe(vec![&DiffDepthStream::from_1000ms(
                 symbols.first().unwrap().0.as_str(),
             )
