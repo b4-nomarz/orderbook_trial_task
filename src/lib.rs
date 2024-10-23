@@ -12,4 +12,4 @@ pub mod adapters;
 pub mod application;
 mod core;
 pub mod ports;
-mod typespec;
+pub mod typespec;

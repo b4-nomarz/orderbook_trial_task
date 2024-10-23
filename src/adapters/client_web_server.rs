@@ -1,10 +1,12 @@
+use std::{borrow::Borrow, ops::Deref};
+
 use crate::{
     application::{ApplicationQuery, ApplicationResponse},
     ports::{WebServer, WebServerSettings},
     typespec::ApplicationLayer,
 };
 use anyhow::{Error, Result};
-use futures_util::{SinkExt, StreamExt, TryStreamExt};
+use futures_util::{SinkExt, TryStreamExt};
 use poem::{
     endpoint::StaticFilesEndpoint,
     get, handler,
@@ -54,20 +56,16 @@ impl WebServer for ClientWebServer {
     }
 }
 
-// DTOs
-type Pair = String;
-type Value<'a> = &'a str;
-
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 struct PairQuery {
     #[serde(rename(serialize = "p", deserialize = "p"))]
-    pair: Pair,
+    pair: String,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 struct PairValue<'v> {
     #[serde(rename(serialize = "p", deserialize = "p"))]
-    pair: Pair,
+    pair: String,
     #[serde(rename(serialize = "v", deserialize = "v"))]
     value: &'v str,
 }
@@ -84,17 +82,28 @@ async fn average_price_web_socket(
     let app_layer = app_layer.clone();
 
     ws.on_upgrade(|mut socket| async move {
+        // loop is needed to loop through all frames for the socket
         loop {
             match socket.try_next().await {
                 Ok(Some(Message::Text(msg))) => {
                     let pair = serde_json::from_str::<PairQuery>(msg.clone().as_str());
 
                     if let Ok(dto) = pair {
-                        let app_layer_res = app_layer.clone().handle_query(
-                            ApplicationQuery::GetAverageValueOfSymbol(crate::typespec::Symbol(
-                                dto.pair.clone(),
-                            )),
-                        );
+                        let app_layer_clone = app_layer.clone();
+                        let app_layer_mutex = app_layer_clone.lock().await;
+
+                        let app_layer_res = {
+                            let query = {
+                                let symbol = {
+                                    let s = dto.pair.clone();
+                                    crate::typespec::Symbol(s)
+                                };
+
+                                ApplicationQuery::GetAverageValueOfSymbol(symbol)
+                            };
+
+                            app_layer_mutex.handle_query(query).await
+                        };
 
                         match app_layer_res {
                             Ok(ApplicationResponse::CurrentAveragePriceForSymbol {
@@ -103,11 +112,15 @@ async fn average_price_web_socket(
                             }) => {
                                 //serialize value and return message to client
                                 let pv = PairValue {
-                                    pair: symbol.0,
+                                    pair: symbol.0.to_string(),
                                     value: price.as_str(),
                                 };
                                 let json_res = serde_json::to_string(&pv).unwrap();
                                 let res = Message::text(json_res);
+                                let _ = socket.send(res).await;
+                            }
+                            Ok(ApplicationResponse::InfrastructureConnected) => {
+                                let res = Message::text("{\"msg\": \"Market connected\"}");
                                 let _ = socket.send(res).await;
                             }
                             _ => {
@@ -117,6 +130,11 @@ async fn average_price_web_socket(
                                 break;
                             }
                         }
+                    } else {
+                        let close_message =
+                            Message::close_with(CloseCode::Error, "Internal server error");
+                        let _ = socket.send(close_message).await;
+                        break;
                     }
                 }
                 Ok(Some(_)) => {
