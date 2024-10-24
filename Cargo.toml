@@ -9,7 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow = "1.0.89"
-binance_spot_connector_rust = { version = "1.2.1", features = ["enable-tokio-tungstenite"] }
+binance_spot_connector_rust = { version = "1.2.1", features = ["enable-tokio-tungstenite", "tokio-tungstenite"] }
 futures-util = { version = "0.3.31", features = ["tokio-io"] }
 poem = { version = "3.1.1", features = ["static-files", "websocket"] }
 serde = "1.0.210"
