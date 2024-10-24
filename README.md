@@ -3,8 +3,8 @@
 Steps to run the service after cloning the repo.
 
 ```
-> docker build . 
-> docker run -p 3000:3000 
+> podman build -t orderbook_trial_task . 
+> podman run -p 3000:3000 orderbook_trial_task:latest 
 ```
 
 ## Architecture 
@@ -41,7 +41,7 @@ and can only be reached by the application layer.
     |                             |                           |                  (serve)>-------------------->|  
     |                             |                           |                          |<------------(fetch webocket route)   
     |                             |                           |                  (upgrade)>------------------>|   
-    |                             |                           |                          |<--(sent msgs)-----<|   
+    |                             |                           |                          |<--(send msgs)-----<|   
     |                             |                           |                   (DTO transforms)            |   
     |                             |                           |<--(App request)---------<|                    |   
     |                             |>------(send msgs)-------->|                          |                    |   
@@ -58,23 +58,22 @@ and can only be reached by the application layer.
 #### Binance Client 
 The binance client is an adapter of the MarketStream port and handles connection
 to the binance API. The port API is only one function that takes in a list of Symbols, 
-a tuple-like struct of trading pairs, and returns the a broadcast reciever. 
+a tuple-like struct of trading pairs, and returns a broadcast reciever. 
 The implementation itself does three main things. Connect to the websocket api. 
-Creating a broadcast channel to create a pubsub. Then creating a seperate thread to loop 
-over websocket messages and pass the incoming messages into the broadcast channel 
-to be used by other methods. Leaving those functions to implement their own DTO 
+Creating a broadcast channel for pubsub message passing. Then creating a seperate thread to loop 
+over incoming websocket messages pass them into the broadcast channel 
+to be used by other parts of the service. Leaving those parts to implement their own DTO 
 transformation methods. 
 
-Pros of creating this adapter in a hexagonal style allows us to swap out implmentations 
+Creating this adapter in a hexagonal style allows us to swap out implmentations 
 to use other market APIs. As the types of the exposed port methods remain the same.
-Also by keeping the abstraction in a struct we can pass it around the codebase 
-if different use cases, like being in a connection limit manager, pop up as 
-the struct is not tied down to the the different layers of the service.
-By putting the connection inside a seperate process out of the main thread we can keep 
-the connection alive and broadcast the messages through the channel recievers. 
-Those receiver can be cloned in other concurrent processes so they all can get the same message 
-instead of skipping over messages, like if a mpsc channel was used in async/await methods 
-on the main thread. 
+Also by keeping the abstraction in a struct we can pass it around the codebase for 
+different use cases, like being in a connection limit manager (not implemented). This is to 
+have the struct not tied down to different layers inside the service.
+By putting the websocket connection inside a seperate process out of the main thread we can keep 
+the connection alive and broadcast the messages through the channel recievers and not block.
+Those receiver are cloned in other concurrent processes to receive the same message. 
+Messages end up being skipped with each call when using mpsc channel as that is a many to one channel.
 
 Cons of the current implementation is that subscr channeliptions can not be created dynamically due to the 
 lack of exposed type needed for type coersion in the binance_spot_connector_rust crate.
@@ -85,18 +84,18 @@ that the market API is spent waiting for the "heart be message.
 #### Application Layer
 
 The application layer acts as an aggregate struct that glues together parts of the service 
-for different workflows. The current implementation is to have a single function that takes 
-an enum that is then pattern matched to run the necessary workflows, and then return a monad 
-of a single enum response type to be used by driven adapters. The application is in a struct rather than 
-being an exposed set of methods so to cut back on the need of having different types for args and returns 
-for each method that can end up convoluting as the service grows.
+for different workflows. A single function that takes  an enum that is then pattern matched 
+to run the necessary workflows. It then returns a monad containing sum type to simplify and 
+combine different return types into a single type. The application layer is struct rather 
+than being an exposed set of functions to be to enforce the design of using the 
+application layer as a token in adapters. 
 
-Cons of the having the API be a single function is the methods inside the match statement can
-to long to read and then be pushed to private functions that matches call. Another is that if the application 
-is instantiated in a manner where it's a single point in memory that is called by different proccesses it can become
-a huge bottle neck. So the adapters that are passed into the struct must be created in a way to be
-able to be passed around through the clones as the Application struct is instantiated near the beginning of
-the initialization of the service and used as a token in the driving adapters where the Application API calls will be made.
+Cons of the having the API be a single function is the methods within the match statement can make the whole function
+long to read. By that point private functions should be created that each matching branch calls. Another is that if the application 
+is instantiated in a manner where it's a single point in memory where other processes call it can become
+a major bottle neck other processes will have to wait till it is free to use. So the driven adapters that are passed 
+into the application layer must be able to be cloned because he initial application layer struct is 
+instantiated near the beginning of the service on execution efore being passed into a driven adapater
 
 #### Web Server
 
@@ -105,9 +104,10 @@ web server is an adapter it can be swapped out with better solutions in the futu
 the web server outside of handling HTTP and WS connections is transforming DTOs to the necessary types requested and
 returned by the application layer.
 
-Cons of this specific implmentation is that it doesn't use the fastest server crate within the rust ecosystem.
-Also if this services was to go live it would be insecure since security headers and middlewares were not coded
-in due to nature of project of being only a technical exam and would be tested in a dev enviroment.
+This specific implmentation doesn't use the fastest server crate within the rust ecosystem. So mileage would vary
+based on the constraints of the hardware this runs on. Also if this services was to go live it would be 
+insecure since security headers and middlewares were not coded in due to nature of project 
+of being only a technical exam and would be tested in a dev enviroment.
  
 #### Svelte frontend
 
@@ -118,15 +118,8 @@ the initial message sent through the websocket, but the component can be
 extended to contain a component that does a live like search functionality if a workflow was created to get
 all existing trading pairs coming from the market stream api.
 
-Cons of using svelte is that components written by each individual within an organization can
-vary in styles of writing methods and state management. While not a problem in itself, from a business management 
-perspective it would take more time and effort to have the team be on the same page to push things to production.
-This can be circumvented by clearly defining a standard that needs to be followed thoroughly 
-due to expressiveness of vanilla JS. In the same light things can be said about JSX/TSX based frameworks, 
-but by having conventions already set by JSX/TSX based frameworks, a certain bar for devs write code to a
-similar style allowing for greater dev/team efficiency.
-
-
-
+Cons of the current solution is that the sent messages from the client aren't throttled so high amount 
+of connections can put a load on the server. Possible solution would be to put some kind of async timer that sends
+each message in intervals versus sending one for each message received.
 
 
