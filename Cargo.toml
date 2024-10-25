@@ -7,6 +7,10 @@ edition = "2021"
 name = "orderbook_trial_task"
 path = "src/lib.rs"
 
+[features]
+## feature for assets to be read from /etc/www/ in container
+prod = []
+
 [dependencies]
 anyhow = "1.0.89"
 binance_spot_connector_rust = { version = "1.2.1", features = ["enable-tokio-tungstenite", "tokio-tungstenite"] }
