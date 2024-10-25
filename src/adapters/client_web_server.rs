@@ -1,5 +1,3 @@
-use std::{borrow::Borrow, ops::Deref};
-
 use crate::{
     application::{ApplicationQuery, ApplicationResponse},
     ports::{WebServer, WebServerSettings},
@@ -33,21 +31,39 @@ impl WebServer for ClientWebServer {
     }
 
     async fn run_server(&self) -> Result<()> {
-        let web_app = Route::new()
-            .nest(
+        let static_files_location = if cfg!(feature = "prod") {
+            // read from web file
+            Route::new().nest(
+                "/",
+                StaticFilesEndpoint::new("/etc/www/dist").index_file("index.html"),
+            )
+        } else {
+            Route::new().nest(
                 "/",
                 StaticFilesEndpoint::new("frontend/svelte-client/dist").index_file("index.html"),
             )
+        };
+
+        let web_app = Route::new()
+            .nest("/", static_files_location)
             .at(
                 "/api/average_order_book_price",
                 get(average_price_web_socket),
             )
             .data(self.app_layer.clone());
 
-        let acceptor = TcpListener::bind(format!("localhost:{}", &self.settings.port))
-            .into_acceptor()
-            .await
-            .unwrap();
+        let acceptor = if cfg!(feature = "prod") {
+            // allow to run in container enviroments
+            TcpListener::bind(format!("0.0.0.0:{}", &self.settings.port))
+                .into_acceptor()
+                .await
+                .unwrap()
+        } else {
+            TcpListener::bind(format!("localhost:{}", &self.settings.port))
+                .into_acceptor()
+                .await
+                .unwrap()
+        };
 
         Server::new_with_acceptor(acceptor)
             .run(web_app)

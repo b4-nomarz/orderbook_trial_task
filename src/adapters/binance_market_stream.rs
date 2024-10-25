@@ -46,6 +46,8 @@ impl MarketStream for BinanceDiffDepthStream {
             .into()])
             .await;
 
+        // keep strings within an arc to minimize memory used among
+        // copying messages by the receiver
         let (sender, receiver) = broadcast::channel::<Arc<String>>(16);
 
         tokio::spawn(async move {

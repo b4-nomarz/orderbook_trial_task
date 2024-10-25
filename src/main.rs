@@ -5,9 +5,6 @@ use orderbook_trial_task::{
     typespec::Symbol,
 };
 
-use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
-
 #[tokio::main]
 async fn main() {
     /*
