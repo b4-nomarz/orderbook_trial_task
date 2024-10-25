@@ -75,7 +75,7 @@ the connection alive and broadcast the messages through the channel recievers an
 Those receiver are cloned in other concurrent processes to receive the same message. 
 Messages end up being skipped with each call when using mpsc channel as that is a many to one channel.
 
-Cons of the current implementation is that subscr channeliptions can not be created dynamically due to the 
+Cons of the current implementation is that subscriptions to the api can not be created dynamically due to the 
 lack of exposed type needed for type coersion in the binance_spot_connector_rust crate.
 Another con is that methods for handling ping pong and error messages were not made to keep the
 connection fault tolerant. Which will cut off the service's connection after the amount of time
@@ -95,7 +95,7 @@ long to read. By that point private functions should be created that each matchi
 is instantiated in a manner where it's a single point in memory where other processes call it can become
 a major bottle neck other processes will have to wait till it is free to use. So the driven adapters that are passed 
 into the application layer must be able to be cloned because he initial application layer struct is 
-instantiated near the beginning of the service on execution efore being passed into a driven adapater
+instantiated near the beginning of the service on execution efore being passed into a driven adapter
 
 #### Web Server
 
